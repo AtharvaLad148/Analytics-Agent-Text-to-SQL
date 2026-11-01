@@ -1,0 +1,78 @@
+# Few-shot examples: verified question -> correct DuckDB SQL.
+# Every query here was run against the Olist database and returns correct
+# results. They teach the agent the canonical join chains and idioms: English
+# category translation (LEFT JOIN + fallback), the delivered-order filter, date
+# bucketing, the top-N pattern, and aggregating reviews at order grain.
+#
+# These are kept DISJOINT from eval/golden_set.yaml on purpose: a few-shot
+# example that matched a graded question would leak the answer into the prompt
+# and inflate the eval. Teach patterns here; grade different questions there.
+
+examples:
+  - question: What is total product revenue by category?
+    sql: |
+      SELECT COALESCE(t.product_category_name_english, p.product_category_name) AS category,
+             SUM(oi.price) AS revenue
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.order_id
+      JOIN products p ON oi.product_id = p.product_id
+      LEFT JOIN product_category_name_translation t
+        ON p.product_category_name = t.product_category_name
+      WHERE o.order_status = 'delivered'
+      GROUP BY 1
+      ORDER BY revenue DESC
+
+  - question: How many orders were delivered each month?
+    sql: |
+      SELECT date_trunc('month', order_purchase_timestamp) AS month,
+             COUNT(DISTINCT order_id) AS orders
+      FROM orders
+      WHERE order_status = 'delivered'
+      GROUP BY 1
+      ORDER BY 1
+
+  - question: What is the average delivery time in days?
+    sql: |
+      SELECT ROUND(AVG(datediff('day', order_purchase_timestamp, order_delivered_customer_date)), 2) AS avg_delivery_days
+      FROM orders
+      WHERE order_status = 'delivered'
+        AND order_delivered_customer_date IS NOT NULL
+
+  - question: Who are the top 10 sellers by revenue?
+    sql: |
+      SELECT oi.seller_id,
+             SUM(oi.price) AS revenue
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.order_id
+      WHERE o.order_status = 'delivered'
+      GROUP BY oi.seller_id
+      ORDER BY revenue DESC
+      LIMIT 10
+
+  - question: What is the share of each payment type?
+    sql: |
+      SELECT payment_type,
+             COUNT(*) AS payments,
+             ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct
+      FROM order_payments
+      GROUP BY payment_type
+      ORDER BY payments DESC
+
+  - question: What is the average review score across delivered orders?
+    sql: |
+      WITH order_review AS (
+        SELECT order_id, AVG(review_score) AS score
+        FROM order_reviews
+        GROUP BY order_id
+      )
+      SELECT ROUND(AVG(r.score), 3) AS avg_review_score
+      FROM orders o
+      JOIN order_review r ON o.order_id = r.order_id
+      WHERE o.order_status = 'delivered'
+
+  - question: What percentage of delivered orders arrived on or before the estimated date?
+    sql: |
+      SELECT ROUND(100.0 * AVG(CASE WHEN order_delivered_customer_date <= order_estimated_delivery_date THEN 1 ELSE 0 END), 2) AS on_time_pct
+      FROM orders
+      WHERE order_status = 'delivered'
+        AND order_delivered_customer_date IS NOT NULL

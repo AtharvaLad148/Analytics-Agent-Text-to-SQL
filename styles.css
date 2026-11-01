@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+/* App background: near-black with a soft purple glow at the top */
+.stApp {
+  background: radial-gradient(1100px 520px at 50% -220px, #1b1533 0%, #0B0B10 58%), #0B0B10;
+  color: #E7E7EA;
+  font-family: 'Inter', sans-serif;
+}
+
+h1, h2, h3 { font-family: 'Space Grotesk', 'Inter', sans-serif; }
+
+/* Hero */
+.hero { padding: 0.6rem 0 0.4rem 0; }
+.hero-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #C9C3FF;
+  background: rgba(124, 92, 255, 0.12);
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  margin-bottom: 1rem;
+}
+.hero-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 3.1rem;
+  font-weight: 700;
+  line-height: 1.06;
+  margin: 0.15rem 0 0.6rem 0;
+}
+.hero-title .grad {
+  background: linear-gradient(90deg, #7C5CFF, #FF4D8D, #FF8A4C);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.hero-sub { color: #9AA0AA; font-size: 1.04rem; max-width: 660px; line-height: 1.5; }
+
+/* Buttons as pills */
+.stButton > button {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 0.5rem 1.15rem;
+  font-weight: 500;
+  transition: transform 0.08s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.stButton > button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(124, 92, 255, 0.28);
+  border-color: rgba(124, 92, 255, 0.55);
+}
+
+/* Cards: the wrapper Streamlit renders for st.container(border=True) */
+[data-testid="stVerticalBlockBorderWrapper"] {
+  background: #16161F;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 16px;
+  padding: 0.3rem 0.3rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  animation: fadeUp 0.35s ease both;
+}
+
+/* Metric chips */
+[data-testid="stMetric"] {
+  background: rgba(124, 92, 255, 0.07);
+  border: 1px solid rgba(124, 92, 255, 0.18);
+  border-radius: 12px;
+  padding: 0.55rem 0.85rem;
+}
+[data-testid="stMetricValue"] { font-size: 1.5rem; }
+[data-testid="stMetricLabel"] p { color: #9AA0AA; font-size: 0.8rem; }
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+  background: #0E0E15;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+.ds-pill {
+  display: inline-block;
+  font-family: 'Space Grotesk', sans-serif;
+  background: rgba(124, 92, 255, 0.14);
+  color: #C9C3FF;
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.88rem;
+}
+
+/* Small uppercase label at the top of each result card */
+.card-label {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #8F94A3;
+  margin: 0.1rem 0 0.35rem 0.1rem;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}

@@ -1,0 +1,19 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+data/*.duckdb
+data/**/*.csv
+data/*.csv
+eval/results/*.csv
+.DS_Store
+
+# Private / internal, not for the public repo
+docs/AUTHOR_GUIDE.md
+HANDOFF.md
+
+# Tooling artifacts (Claude Code / skills CLI), not part of the project
+.agents/
+.claude/skills/
+skills-lock.json

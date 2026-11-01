@@ -1,0 +1,59 @@
+# Semantic layer for the UPI Transactions 2024 dataset (synthetic, India).
+# A single fact table. This is a different domain from Olist, loaded with the
+# same agent code: only this bundle changes. Amounts are in INR.
+
+dataset: UPI Transactions 2024 (synthetic, India). One fact table; amounts in INR.
+
+tables:
+  upi_transactions_2024:
+    description: One row per UPI transaction in 2024. The only table in this dataset.
+    grain: one row per transaction
+    columns:
+      "transaction id": Unique transaction id. The name has a space, so write it as "transaction id".
+      timestamp: When the transaction happened. Use this for any time analysis.
+      "transaction type": Kind of transfer, one of P2P, P2M, Bill Payment, Recharge. P2M is person-to-merchant, P2P is person-to-person. The name has a space, so write it as "transaction type".
+      merchant_category: Merchant category, one of Grocery, Food, Shopping, Fuel, Other, Utilities, Transport, Entertainment, Healthcare, Education.
+      "amount (INR)": Transaction amount in Indian Rupees (integer). The name has a space and parentheses, so write it as "amount (INR)".
+      transaction_status: Outcome, one of SUCCESS or FAILED.
+      sender_age_group: Age bucket of the sender, one of 18-25, 26-35, 36-45, 46-55, 56+.
+      receiver_age_group: Age bucket of the receiver, same buckets as the sender.
+      sender_state: Indian state of the sender.
+      sender_bank: Sender's bank, one of SBI, HDFC, ICICI, Axis, PNB, Yes Bank, Kotak, IndusInd.
+      receiver_bank: Receiver's bank, same set as sender_bank.
+      device_type: Device used, one of Android, iOS, Web.
+      network_type: Network used, one of 4G, 5G, WiFi, 3G.
+      fraud_flag: 1 if the transaction was flagged as potentially fraudulent, else 0.
+      hour_of_day: Hour the transaction happened, 0 to 23.
+      day_of_week: Day name, Monday to Sunday.
+      is_weekend: 1 if the transaction fell on a weekend, else 0.
+
+business_rules:
+  - There is one table, upi_transactions_2024, and amounts are integers in INR.
+  - A successful transaction has transaction_status = 'SUCCESS'. For value, volume, and average-value metrics, count only successful transactions unless the question clearly asks about attempts or includes failures.
+  - Total transaction value (GMV) is the sum of the amount column over successful transactions.
+  - Average transaction value is total value divided by the count of successful transactions.
+  - Success rate is the share of all transactions with transaction_status = 'SUCCESS'; failure rate is the share with 'FAILED'.
+  - fraud_flag is 0 or 1, so the fraud rate is the average of fraud_flag, and the fraud count is the sum of fraud_flag.
+  - Counting transactions means counting rows; one row is one transaction.
+  - sender_state values are Indian state names; status and type values are case-sensitive exactly as listed.
+
+dialect_notes:
+  - DuckDB SQL. Three column names contain spaces or parentheses and must be written in double quotes every time they appear. These are the transaction id, the transaction type, and the amount (INR) columns.
+  - Bucket time with date_trunc('month', timestamp), or use hour_of_day and day_of_week directly.
+  - Return exactly one SELECT (or WITH ... SELECT) statement.
+
+metrics:
+  total_value: |
+    SUM("amount (INR)") over rows where transaction_status = 'SUCCESS'.
+  avg_transaction_value: |
+    SUM("amount (INR)") / COUNT(*) over successful transactions.
+  success_rate: |
+    ROUND(100.0 * AVG(CASE WHEN transaction_status = 'SUCCESS' THEN 1 ELSE 0 END), 2), expressed as a percentage.
+  failure_rate: |
+    ROUND(100.0 * AVG(CASE WHEN transaction_status = 'FAILED' THEN 1 ELSE 0 END), 2), expressed as a percentage.
+  fraud_rate: |
+    ROUND(100.0 * AVG(fraud_flag), 3), expressed as a percentage.
+  fraud_count: |
+    SUM(fraud_flag), or COUNT(*) where fraud_flag = 1.
+  transaction_count: |
+    COUNT(*).

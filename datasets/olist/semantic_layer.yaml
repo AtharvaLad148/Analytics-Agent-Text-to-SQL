@@ -1,0 +1,135 @@
+# Semantic layer for the Olist Brazilian E-Commerce public dataset.
+# Plain-English meaning + join patterns + metric definitions. This is what moves
+# the agent from "plausible" to "correct". When you swap datasets, rewrite this
+# file for the new schema; the agent code does not change.
+
+dataset: Olist Brazilian E-Commerce (public dataset). Currency is Brazilian Real (BRL).
+
+tables:
+  orders:
+    description: The spine of the dataset. One row per order.
+    grain: one row per order_id
+    columns:
+      order_id: Unique order id. Join key to order_items, order_payments, order_reviews.
+      customer_id: Per-order customer key. Joins to customers.customer_id. This is NOT a person id.
+      order_status: Lifecycle status. One of delivered, shipped, canceled, unavailable, invoiced, processing, created, approved.
+      order_purchase_timestamp: When the order was placed. Use THIS as the order date for any time analysis.
+      order_approved_at: When payment was approved.
+      order_delivered_carrier_date: When the order was handed to the carrier.
+      order_delivered_customer_date: When the customer received the order. Use for delivery-time and on-time metrics.
+      order_estimated_delivery_date: Delivery date promised to the customer.
+    joins:
+      - orders.customer_id = customers.customer_id
+      - orders.order_id = order_items.order_id
+      - orders.order_id = order_payments.order_id
+      - orders.order_id = order_reviews.order_id
+  order_items:
+    description: One row per item (one unit) within an order. An order has one or more item rows.
+    grain: one row per (order_id, order_item_id)
+    columns:
+      order_id: Joins to orders.order_id.
+      order_item_id: Sequence number of the item within the order (1, 2, 3...). It is NOT a quantity. Count rows to count units; never SUM this column.
+      product_id: Joins to products.product_id.
+      seller_id: Joins to sellers.seller_id.
+      shipping_limit_date: Seller's shipping deadline for the item.
+      price: Item price in BRL. This is product revenue. Sum this for revenue.
+      freight_value: Shipping cost for the item in BRL. Separate from price; not part of product revenue.
+    joins:
+      - order_items.product_id = products.product_id
+      - order_items.seller_id = sellers.seller_id
+  products:
+    description: Product catalog. Category names are in Portuguese and must be translated for reporting.
+    grain: one row per product_id
+    columns:
+      product_id: Unique product id.
+      product_category_name: Category in PORTUGUESE. Join to product_category_name_translation for the English name.
+      product_name_lenght: Character length of the product name (original dataset misspelling kept).
+      product_description_lenght: Character length of the description (original misspelling kept).
+      product_photos_qty: Number of product photos.
+      product_weight_g: Weight in grams.
+      product_length_cm: Length in cm.
+      product_height_cm: Height in cm.
+      product_width_cm: Width in cm.
+    joins:
+      - products.product_category_name = product_category_name_translation.product_category_name
+  product_category_name_translation:
+    description: Lookup from Portuguese category name to English.
+    grain: one row per product_category_name
+    columns:
+      product_category_name: Portuguese category name (join key to products).
+      product_category_name_english: English category name. Report this to users.
+    notes: A few product categories are missing here, so LEFT JOIN from products and fall back to the Portuguese name, never INNER JOIN (which would drop those products).
+  customers:
+    description: One row per order-customer. customer_id identifies the customer on a single order; customer_unique_id identifies the real person across orders.
+    grain: one row per customer_id (one per order)
+    columns:
+      customer_id: Per-order customer key. Joins to orders.customer_id.
+      customer_unique_id: The real person across orders. Count DISTINCT this for "number of customers".
+      customer_zip_code_prefix: First digits of the customer's zip code.
+      customer_city: Customer city (Brazil).
+      customer_state: Two-letter Brazilian state code (SP, RJ, MG, ...).
+  order_payments:
+    description: Payment records per order. An order can have several payment rows (installments, split methods, vouchers).
+    grain: one row per (order_id, payment_sequential)
+    columns:
+      order_id: Joins to orders.order_id.
+      payment_sequential: Sequence of this payment within the order.
+      payment_type: One of credit_card, boleto, voucher, debit_card, not_defined.
+      payment_installments: Number of installments.
+      payment_value: Amount paid on this payment row, in BRL.
+    notes: SUM(payment_value) per order can differ from item price + freight because of vouchers and multiple methods. Use order_items.price for product revenue, not payment_value.
+  order_reviews:
+    description: Customer reviews of orders. review_score is 1 (worst) to 5 (best). An order can have more than one review row.
+    grain: roughly one row per review (an order may have more than one)
+    columns:
+      review_id: Review id.
+      order_id: Joins to orders.order_id.
+      review_score: Integer 1 to 5.
+      review_comment_title: Optional short title.
+      review_comment_message: Optional free text.
+      review_creation_date: When the review was created.
+      review_answer_timestamp: When the review was answered.
+    notes: Joining reviews straight to order_items multiplies item rows by review rows. Aggregate reviews at order grain first, then join.
+  sellers:
+    description: Marketplace sellers.
+    grain: one row per seller_id
+    columns:
+      seller_id: Unique seller id. Joins to order_items.seller_id.
+      seller_zip_code_prefix: First digits of the seller's zip code.
+      seller_city: Seller city.
+      seller_state: Two-letter Brazilian state code.
+  geolocation:
+    description: Zip-code-prefix to latitude/longitude/city/state. Many rows per zip prefix.
+    grain: many rows per geolocation_zip_code_prefix (NOT unique)
+    columns:
+      geolocation_zip_code_prefix: Zip code prefix.
+      geolocation_lat: Latitude.
+      geolocation_lng: Longitude.
+      geolocation_city: City.
+      geolocation_state: Two-letter Brazilian state code.
+    notes: Rarely needed. The zip prefix is not a unique key here, so joining it to customers/sellers fans out rows. Prefer customer_state / seller_state for geography.
+
+business_rules:
+  - Currency is Brazilian Real (BRL).
+  - Realized sales = orders with order_status = 'delivered'. For revenue, units, and AOV, filter to delivered orders unless the question clearly asks otherwise. Always exclude 'canceled' and 'unavailable'.
+  - Revenue means product revenue, SUM(order_items.price), for delivered orders. Exclude freight unless the question asks to include shipping or freight. Never use order_payments.payment_value for revenue.
+  - Number of customers means COUNT(DISTINCT customers.customer_unique_id), never customer_id (which is one per order).
+  - Units sold means COUNT(*) of order_items rows for delivered orders. Never SUM(order_item_id).
+  - Report product categories in English by LEFT JOINing products to product_category_name_translation; fall back to the Portuguese name when the English is missing. Do not show raw Portuguese names when an English name exists.
+  - For time trends use order_purchase_timestamp. Delivery time in days = order_delivered_customer_date minus order_purchase_timestamp. An order is "on time" when order_delivered_customer_date <= order_estimated_delivery_date.
+  - customer_state and seller_state are two-letter Brazilian state codes.
+
+dialect_notes:
+  - DuckDB SQL. Bucket months with date_trunc('month', order_purchase_timestamp).
+  - Day differences via datediff('day', a, b), or (b::date - a::date); cast a TIMESTAMP to a day with ::date.
+  - Return exactly one SELECT (or WITH ... SELECT) statement.
+
+metrics:
+  revenue: SUM(order_items.price) for orders whose order_status = 'delivered' (join order_items to orders).
+  revenue_incl_freight: SUM(order_items.price + order_items.freight_value) for delivered orders.
+  average_order_value: revenue / COUNT(DISTINCT order_items.order_id), over delivered orders.
+  units_sold: COUNT(*) of order_items rows for delivered orders.
+  num_customers: COUNT(DISTINCT customers.customer_unique_id).
+  avg_review_score: AVG(review_score), reviews aggregated at order grain before joining out.
+  on_time_delivery_rate: share of delivered orders with order_delivered_customer_date <= order_estimated_delivery_date.
+  avg_delivery_days: AVG(datediff('day', order_purchase_timestamp, order_delivered_customer_date)) for delivered orders.

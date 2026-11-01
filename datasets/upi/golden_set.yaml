@@ -1,0 +1,124 @@
+# Golden set for the UPI dataset: question + reference SQL (the correct query).
+# Scored by execution match against the reference result. `tests` is a human note
+# (ignored by the eval). "trap" questions are ones a schema-only agent tends to
+# get wrong; the semantic layer is what makes them correct. Kept DISJOINT from
+# examples.yaml so the few-shot prompt never contains a graded answer.
+
+# --- Trap questions: the semantic layer should move these from wrong to right ---
+
+- question: What is the total transaction value?
+  tests: trap - SUM of amount over SUCCESS only, double-quoted column
+  reference_sql: |
+    SELECT SUM("amount (INR)") AS total_value
+    FROM upi_transactions_2024
+    WHERE transaction_status = 'SUCCESS'
+
+- question: What is the average transaction value?
+  tests: trap - average amount over successful transactions
+  reference_sql: |
+    SELECT AVG("amount (INR)") AS avg_value
+    FROM upi_transactions_2024
+    WHERE transaction_status = 'SUCCESS'
+
+- question: How many transactions were flagged as fraudulent?
+  tests: trap - fraud_flag is 0/1, count where it is 1
+  reference_sql: |
+    SELECT COUNT(*) AS fraud_count
+    FROM upi_transactions_2024
+    WHERE fraud_flag = 1
+
+- question: How many transactions failed?
+  tests: trap - exact enum 'FAILED'
+  reference_sql: |
+    SELECT COUNT(*) AS failed
+    FROM upi_transactions_2024
+    WHERE transaction_status = 'FAILED'
+
+- question: Which merchant category has the highest transaction value?
+  tests: trap - SUCCESS-only value by category, top 1
+  reference_sql: |
+    SELECT merchant_category,
+           SUM("amount (INR)") AS total_value
+    FROM upi_transactions_2024
+    WHERE transaction_status = 'SUCCESS'
+    GROUP BY merchant_category
+    ORDER BY total_value DESC
+    LIMIT 1
+
+- question: What is the total value of P2M transactions?
+  tests: trap - double-quoted "transaction type" = P2M, SUCCESS only
+  reference_sql: |
+    SELECT SUM("amount (INR)") AS p2m_value
+    FROM upi_transactions_2024
+    WHERE "transaction type" = 'P2M'
+      AND transaction_status = 'SUCCESS'
+
+- question: What is the overall success rate?
+  tests: trap - share of SUCCESS as a percentage (metric convention)
+  reference_sql: |
+    SELECT ROUND(100.0 * AVG(CASE WHEN transaction_status = 'SUCCESS' THEN 1 ELSE 0 END), 2) AS success_rate_pct
+    FROM upi_transactions_2024
+
+# --- Basic questions: both the bare and full agent should get these ---
+
+- question: How many transactions are there in total?
+  tests: basic
+  reference_sql: |
+    SELECT COUNT(*) AS transactions FROM upi_transactions_2024
+
+- question: How many transactions are there in each status?
+  tests: basic
+  reference_sql: |
+    SELECT transaction_status, COUNT(*) AS transactions
+    FROM upi_transactions_2024
+    GROUP BY transaction_status
+
+- question: How many transactions came from each sender state?
+  tests: basic
+  reference_sql: |
+    SELECT sender_state, COUNT(*) AS transactions
+    FROM upi_transactions_2024
+    GROUP BY sender_state
+
+- question: How many transactions happened on a weekend?
+  tests: basic - is_weekend flag
+  reference_sql: |
+    SELECT COUNT(*) AS weekend_transactions
+    FROM upi_transactions_2024
+    WHERE is_weekend = 1
+
+- question: What is the highest single transaction amount?
+  tests: basic - scalar MAX, double-quoted column
+  reference_sql: |
+    SELECT MAX("amount (INR)") AS max_amount
+    FROM upi_transactions_2024
+
+- question: How many distinct sender banks are there?
+  tests: basic
+  reference_sql: |
+    SELECT COUNT(DISTINCT sender_bank) AS banks
+    FROM upi_transactions_2024
+
+- question: Which sender state has the most transactions?
+  tests: basic - top 1 by count
+  reference_sql: |
+    SELECT sender_state, COUNT(*) AS transactions
+    FROM upi_transactions_2024
+    GROUP BY sender_state
+    ORDER BY transactions DESC
+    LIMIT 1
+
+- question: How many transactions used each device type?
+  tests: basic
+  reference_sql: |
+    SELECT device_type, COUNT(*) AS transactions
+    FROM upi_transactions_2024
+    GROUP BY device_type
+
+- question: How many transactions happened in each hour of the day?
+  tests: basic - hour_of_day grouping
+  reference_sql: |
+    SELECT hour_of_day, COUNT(*) AS transactions
+    FROM upi_transactions_2024
+    GROUP BY hour_of_day
+    ORDER BY hour_of_day

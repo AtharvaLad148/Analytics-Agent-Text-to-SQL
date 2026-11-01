@@ -1,0 +1,55 @@
+# Few-shot examples for UPI: verified question -> correct DuckDB SQL.
+# Every query was run against data/upi.duckdb and returns correct results. They
+# teach the idioms for this dataset: double-quoting the spaced column names, the
+# SUCCESS-only filter for value metrics, fraud_flag as 0/1, and time bucketing.
+# Kept DISJOINT from golden_set.yaml so the eval is never contaminated.
+
+examples:
+  - question: What is the total transaction value by merchant category?
+    sql: |
+      SELECT merchant_category,
+             SUM("amount (INR)") AS total_value
+      FROM upi_transactions_2024
+      WHERE transaction_status = 'SUCCESS'
+      GROUP BY merchant_category
+      ORDER BY total_value DESC
+
+  - question: What is the success rate by sender bank?
+    sql: |
+      SELECT sender_bank,
+             ROUND(100.0 * AVG(CASE WHEN transaction_status = 'SUCCESS' THEN 1 ELSE 0 END), 2) AS success_rate_pct
+      FROM upi_transactions_2024
+      GROUP BY sender_bank
+      ORDER BY success_rate_pct DESC
+
+  - question: What is the overall fraud rate?
+    sql: |
+      SELECT ROUND(100.0 * AVG(fraud_flag), 3) AS fraud_rate_pct
+      FROM upi_transactions_2024
+
+  - question: How many transactions were there of each type?
+    sql: |
+      SELECT "transaction type",
+             COUNT(*) AS transactions
+      FROM upi_transactions_2024
+      GROUP BY "transaction type"
+      ORDER BY transactions DESC
+
+  - question: What is the monthly successful transaction volume and value?
+    sql: |
+      SELECT date_trunc('month', timestamp) AS month,
+             COUNT(*) AS transactions,
+             SUM("amount (INR)") AS total_value
+      FROM upi_transactions_2024
+      WHERE transaction_status = 'SUCCESS'
+      GROUP BY 1
+      ORDER BY 1
+
+  - question: What is the average transaction value by device type?
+    sql: |
+      SELECT device_type,
+             ROUND(AVG("amount (INR)"), 2) AS avg_value
+      FROM upi_transactions_2024
+      WHERE transaction_status = 'SUCCESS'
+      GROUP BY device_type
+      ORDER BY avg_value DESC

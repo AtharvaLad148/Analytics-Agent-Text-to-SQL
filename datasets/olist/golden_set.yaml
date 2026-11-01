@@ -1,0 +1,151 @@
+# Golden set for the Olist dataset: question + reference SQL (the correct query).
+# The eval scores the agent by comparing its result to the reference result, so
+# we never hardcode expected numbers.
+#
+# `tests` is a note for humans (ignored by the eval) saying what each question
+# probes. "trap" questions are ones a schema-only agent tends to get wrong; the
+# semantic layer is what makes them correct. These questions are kept DISJOINT
+# from examples.yaml so the few-shot prompt never contains a graded answer.
+
+# --- Trap questions: the semantic layer should move these from wrong to right ---
+
+- question: How many customers do we have?
+  tests: trap - distinct customer_unique_id, not customer_id
+  reference_sql: |
+    SELECT COUNT(DISTINCT customer_unique_id) AS num_customers
+    FROM customers
+
+- question: What is our total revenue?
+  tests: trap - SUM(price) on delivered orders, not payment_value
+  reference_sql: |
+    SELECT SUM(oi.price) AS revenue
+    FROM order_items oi
+    JOIN orders o ON oi.order_id = o.order_id
+    WHERE o.order_status = 'delivered'
+
+- question: What is the average order value?
+  tests: trap - revenue over distinct delivered orders
+  reference_sql: |
+    SELECT SUM(oi.price) / COUNT(DISTINCT o.order_id) AS aov
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    WHERE o.order_status = 'delivered'
+
+- question: How many units were sold?
+  tests: trap - COUNT(*) of item rows, never SUM(order_item_id)
+  reference_sql: |
+    SELECT COUNT(*) AS units
+    FROM order_items oi
+    JOIN orders o ON oi.order_id = o.order_id
+    WHERE o.order_status = 'delivered'
+
+- question: What is our total revenue including freight?
+  tests: trap - price + freight_value on delivered orders
+  reference_sql: |
+    SELECT SUM(oi.price + oi.freight_value) AS revenue_incl_freight
+    FROM order_items oi
+    JOIN orders o ON oi.order_id = o.order_id
+    WHERE o.order_status = 'delivered'
+
+- question: Which product category has the highest revenue?
+  tests: trap - English category via LEFT JOIN translation, delivered revenue
+  reference_sql: |
+    SELECT COALESCE(t.product_category_name_english, p.product_category_name) AS category,
+           SUM(oi.price) AS revenue
+    FROM order_items oi
+    JOIN orders o ON oi.order_id = o.order_id
+    JOIN products p ON oi.product_id = p.product_id
+    LEFT JOIN product_category_name_translation t
+      ON p.product_category_name = t.product_category_name
+    WHERE o.order_status = 'delivered'
+    GROUP BY 1
+    ORDER BY revenue DESC
+    LIMIT 1
+
+- question: How many distinct product categories are there?
+  tests: trap - English category, LEFT JOIN so untranslated ones are not dropped
+  reference_sql: |
+    SELECT COUNT(DISTINCT COALESCE(t.product_category_name_english, p.product_category_name)) AS categories
+    FROM products p
+    LEFT JOIN product_category_name_translation t
+      ON p.product_category_name = t.product_category_name
+
+- question: Which customer state has the most customers?
+  tests: trap - distinct customer_unique_id by state
+  reference_sql: |
+    SELECT customer_state,
+           COUNT(DISTINCT customer_unique_id) AS customers
+    FROM customers
+    GROUP BY customer_state
+    ORDER BY customers DESC
+    LIMIT 1
+
+- question: How many customers placed more than one order?
+  tests: trap - repeat buyers keyed on customer_unique_id
+  reference_sql: |
+    SELECT COUNT(*) AS repeat_customers
+    FROM (
+      SELECT c.customer_unique_id
+      FROM orders o
+      JOIN customers c ON o.customer_id = c.customer_id
+      GROUP BY c.customer_unique_id
+      HAVING COUNT(DISTINCT o.order_id) > 1
+    )
+
+- question: How many orders were paid with a credit card?
+  tests: trap - distinct orders via the payments table
+  reference_sql: |
+    SELECT COUNT(DISTINCT order_id) AS orders
+    FROM order_payments
+    WHERE payment_type = 'credit_card'
+
+- question: How many orders were cancelled?
+  tests: trap - exact enum spelling 'canceled'
+  reference_sql: |
+    SELECT COUNT(*) AS cancelled_orders
+    FROM orders
+    WHERE order_status = 'canceled'
+
+# --- Basic questions: both the bare and the full agent should get these ---
+
+- question: How many orders are there in total?
+  tests: basic
+  reference_sql: |
+    SELECT COUNT(*) AS orders FROM orders
+
+- question: How many products are in the catalog?
+  tests: basic
+  reference_sql: |
+    SELECT COUNT(*) AS products FROM products
+
+- question: How many sellers are there?
+  tests: basic
+  reference_sql: |
+    SELECT COUNT(DISTINCT seller_id) AS sellers FROM sellers
+
+- question: How many orders are there in each status?
+  tests: basic
+  reference_sql: |
+    SELECT order_status, COUNT(*) AS orders
+    FROM orders
+    GROUP BY order_status
+
+- question: How many reviews have a score of 5?
+  tests: basic
+  reference_sql: |
+    SELECT COUNT(*) AS five_star_reviews
+    FROM order_reviews
+    WHERE review_score = 5
+
+- question: What is the highest price paid for a single item?
+  tests: basic - scalar MAX(price)
+  reference_sql: |
+    SELECT MAX(price) AS max_item_price
+    FROM order_items
+
+- question: How many orders were placed in 2017?
+  tests: basic - year filter on order_purchase_timestamp
+  reference_sql: |
+    SELECT COUNT(*) AS orders
+    FROM orders
+    WHERE EXTRACT(year FROM order_purchase_timestamp) = 2017
